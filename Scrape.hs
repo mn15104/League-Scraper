@@ -1,8 +1,14 @@
+module Scrape where
+import Control.Concurrent
+import Control.Monad
+import System.IO
 import Network.Curl
 import Text.HTML.Scalpel
 import Text.HTML.TagSoup
 import Data.Char
 import Data.Tuple.Sequence
+import Prelude
+import Data.List
 -- chroots
 -- :: (Ord str, Text.StringLike.StringLike str) =>
 --    Selector -> Scraper str a -> Scraper str [a]
@@ -31,8 +37,11 @@ import Data.Tuple.Sequence
 
 -- scrapeURL :: URL -> Scraper str a -> IO (Maybe a)
 
+data SummonerInfo = SummonerInfo [Ranked] [Game] deriving Show
 
-data Game = Game Champion KDA | Z deriving Show
+
+
+data Game = Game Champion KDA | Zempty deriving Show
 type Champion = String
 type KDA = (String, String, String)
 data GameResult = Victory | Defeat
@@ -41,12 +50,14 @@ data GameType = Normal | Solo | Flex
 data RankedStat = RankedStat Champion KDA WinPercent Played 
 type Played = Int
 type WinPercent = Int
+data Ranked = Ranked String String String String | Rempty deriving Show
 
-summoner :: IO (Maybe [Game])
-summoner = scrapeURL "http://euw.op.gg/summoner/userName=elliot" gameHistory 
+
+gameHistory :: IO (Maybe [Game])
+gameHistory = scrapeURL "http://euw.op.gg/summoner/userName=elliot" gameHist
     where 
-        gameHistory :: Scraper String [Game]
-        gameHistory = 
+        gameHist :: Scraper String [Game]
+        gameHist = 
             chroots (TagString "div" @: [hasClass "GameItemWrap"])
                 game
         game :: Scraper String Game
@@ -58,12 +69,12 @@ summoner = scrapeURL "http://euw.op.gg/summoner/userName=elliot" gameHistory
             return $ Game champ' kda'
 
 
-rankedStats :: IO (Maybe [[[String]]])
+rankedStats :: IO (Maybe [Ranked])
 rankedStats = scrapeURL "http://euw.op.gg/summoner/userName=elliot" stats 
     where 
-        stats :: Scraper String [[[String]]]
-        stats = chroots (TagString "div" @: [hasClass "SideContent"]) stat
-        stat :: Scraper String [[String]]
+        stats :: Scraper String [Ranked]
+        stats = chroot (TagString "div" @: [hasClass "SideContent"]) stat
+        stat :: Scraper String [Ranked]
         stat = do 
             champName <- attrs "title" (TagString "div" @: [hasClass "Face"])
             kda <- texts (TagString "span" @: [hasClass "KDA"])
@@ -73,14 +84,21 @@ rankedStats = scrapeURL "http://euw.op.gg/summoner/userName=elliot" stats
 
             let playedFilt = map (filter (\c -> c /= '\n' && c /= '\t')) played
                 winprcFilt = map (filter (\c -> c /= '\n' && c /= '\t')) winprc
-            return [champName, kda, playedFilt, winprcFilt]
+            
+            let s = zip4 champName kda playedFilt winprcFilt
+                s' = map (\(a,b,c,d) -> Ranked a b c d ) s
+            return s'
 
-main = do 
-    x <- rankedStats 
-    let y = case x of Nothing -> [[[]]]
-                      Just x' -> x'
-        -- y' = map (\xs -> xs ++ ['\n', '\n']) y
-    putStrLn $ show y
+runScrape :: IO (SummonerInfo)
+runScrape = do 
+    ranked <- rankedStats 
+    history <- gameHistory
+    let (x,y) = case (ranked, history) of (Just x', Just y') -> (x', y')
+                                          (Just x', Nothing) -> (x', [])
+                                          (Nothing, Just y') -> ([], y')
+                                          _ -> ([],[])
+
+    return $ SummonerInfo x y 
     
 champion :: Selector -> Scraper String Champion 
 champion singleGame = do 
@@ -106,6 +124,8 @@ kda singleGame = do
 mapTuple3 :: (a -> b) -> (a, a, a) -> (b, b, b)
 mapTuple3 f (x,y,z) = (f x, f y, f z)
 
+mapTuple4 :: (a -> b) -> (a, a, a, a) -> (b, b, b, b)
+mapTuple4 f (s,x,y,z) = (f s, f x, f y, f z)
 
 
 
