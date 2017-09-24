@@ -63,7 +63,7 @@ playedToInt :: String -> Int
 playedToInt played = read $ takeWhile (isNumber) played
 
 rankedStats :: String -> IO (Maybe [Ranked])
-rankedStats user= scrapeURL ("http://euw.op.gg/summoner/userName=" ++ user) stats 
+rankedStats user = scrapeURL ("http://euw.op.gg/summoner/userName=" ++ user) stats 
     where 
         stats :: Scraper String [Ranked]
         stats = chroot (TagString "div" @: [hasClass "SideContent"]) stat
@@ -135,8 +135,8 @@ kda singleGame = do
     -- let c
     return $ KDAt $ mapTuple3 read test
 
-runScrape :: String -> IO (SummonerInfo)
-runScrape user = do 
+runSummoner :: String -> IO (SummonerInfo)
+runSummoner user = do 
     ranked <- rankedStats user
     history <- gameHistory user
     let (x,y) = case (ranked, history) of (Just x', Just y') -> (x', y')
